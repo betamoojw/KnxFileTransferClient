@@ -41,6 +41,7 @@ class Program
     private static int useMaxAPDU = 15;
     private static bool remoteCanUseResume = false;
     private static bool remoteResumeTimeout = false;
+    private static bool remoteUseLegacyOverhead = false;
 
     static async Task<int> Main(string[] args)
     {
@@ -188,6 +189,7 @@ class Program
                 Console.WriteLine($"Version Remote:     {remoteVersion}");
                 remoteCanUseResume = remoteVersion >= new SemanticVersion(0, 1, 3);
                 remoteResumeTimeout = remoteVersion == new SemanticVersion(0, 1, 3);
+                remoteUseLegacyOverhead = remoteVersion <= new SemanticVersion(0, 1, 3);
                 Console.ResetColor();
 
             } catch {
@@ -771,7 +773,9 @@ class Program
                     Console.WriteLine("Info:  Keine Wiederaufnahme");
 
                 if (start_sequence > 0)
+                {
                     await client.FileUpload("/fw.bin", stream, args.Get<int>("pkg"), start_sequence, args.Get<bool>("force"));
+                }
             }
             catch (Exception ex)
             {
@@ -916,10 +920,11 @@ class Program
             }
             byte[] file = FileHandler.GetBytes(source);
 
-            SemanticVersion version = await client.CheckVersion();
             int packageSize = length - 6;
-            if (version <= new SemanticVersion(0, 1, 4))
+            if (remoteUseLegacyOverhead)
                 packageSize = length - 3;
+
+            Console.WriteLine($"packageSize: {packageSize} Bytes");
 
             CRCTool crc = new();
             crc.Init(CRCTool.CRCCode.CRC32);
@@ -939,10 +944,10 @@ class Program
                     return -1;
                 }
 
-                int start_byte = (start_sequence * packageSize) + 1;
+                int start_byte = (start_sequence * packageSize);
                 int start_perc = (int)((double)start_byte / file.Length * 100);
                 int needed_sequences = (int)Math.Ceiling((double)file.Length / packageSize) - 1;
-                Console.WriteLine($"Info:  Starte bei {start_byte}/{file.Length} Bytes ({start_perc}%) [{start_sequence}/{needed_sequences} Sequenzen]");
+                Console.WriteLine($"Info:  Starte bei {start_byte}/{file.Length} Bytes ({start_perc}%) [{start_sequence+1}/{needed_sequences} Sequenzen]");
                 start_sequence++; // sequence starts at 1, 0 is open file etc.
                 return start_sequence;
             } else {
